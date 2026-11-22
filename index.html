@@ -276,6 +276,9 @@ button.menu-sub-btn { flex: 1; padding: 8px; font-size: 11px; cursor: pointer; }
 #print-preview {
   display:none; position:fixed; inset:0; z-index:10000; background:#777;
   overflow:auto; padding:20px; box-sizing:border-box;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  overscroll-behavior:contain;
 }
 #print-preview-inner { display:flex; flex-direction:column; align-items:center; gap:18px; }
 /* 画面表示用の外枠。印刷ページ本体の寸法には影響させない */
@@ -606,7 +609,7 @@ button.menu-sub-btn { flex: 1; padding: 8px; font-size: 11px; cursor: pointer; }
     <span style="color:green;">♠</span>薬局
     <span style="color:red;">■</span>助産院
     <span style="color:brown;">●</span>介護
-    <span style="color:orange;">　▲</span>バス停 （OpenStreetMap 2026/09データ）<br>
+    <span style="color:orange;"> ▲</span>バス停 （OpenStreetMap 2026/09データ）<br>
     【学校関係】（国土地理院・国土交通省 2023年度版）<br>
     <span style="color:green;">★</span>小学校
     <span style="color:red;">♥</span>中学校
@@ -735,6 +738,12 @@ button.menu-sub-btn { flex: 1; padding: 8px; font-size: 11px; cursor: pointer; }
 
     map.pm.addControls({ position: 'topright' });
     map.pm.removeControls();
+
+    map.on('pm:create', function(e) {
+        if (e && e.layer instanceof L.Marker) {
+            e.layer._isUserDrawingMarker = true;
+        }
+    });
 
     let currentSelectedColor = "#3388ff";
     let isTextMode = false;
@@ -889,9 +898,6 @@ button.menu-sub-btn { flex: 1; padding: 8px; font-size: 11px; cursor: pointer; }
     const CustomActionControl = L.Control.extend({
       options: { position: 'topright' },
       onAdd: function() {
-        // 4つの操作アイコンを2×2で整列
-        // 上段：テキスト／カラーパレット
-        // 下段：画像の追加・編集／配置済み画像の選択
         const container = L.DomUtil.create('div', 'leaflet-bar custom-action-grid');
 
         const textBtn = L.DomUtil.create('a', 'pm-text-btn', container);
@@ -905,7 +911,6 @@ button.menu-sub-btn { flex: 1; padding: 8px; font-size: 11px; cursor: pointer; }
           toggleTextMode(!isTextMode);
         };
 
-        // テキストアイコンの右隣にカラーパレットを配置
         const colorBtnContainer = L.DomUtil.create('div', 'pm-color-picker-container', container);
         const btn = L.DomUtil.create('div', 'pm-color-btn', colorBtnContainer);
         btn.innerHTML = '🎨';
@@ -925,7 +930,6 @@ button.menu-sub-btn { flex: 1; padding: 8px; font-size: 11px; cursor: pointer; }
           btn.style.borderBottom = `10px solid ${currentSelectedColor}`;
         };
 
-        // 下段：画像の追加・編集／配置済み画像の選択
         const imgBtn = L.DomUtil.create('a', 'pm-image-btn', container);
         imgBtn.innerHTML = '🖼️';
         imgBtn.title = "画像の追加・編集";
@@ -1221,12 +1225,20 @@ button.menu-sub-btn { flex: 1; padding: 8px; font-size: 11px; cursor: pointer; }
         }
     }    
 
+    const CHOME_BOUNDARY_STYLE = {
+        color: "red",
+        weight: 2,
+        opacity: 1.0,
+        fillColor: "#ff69b4",
+        fillOpacity: 0
+    };
+
     function loadChome(idx) {
       fetch(`geo_0_町丁目境界${idx}.geojson`)
         .then(res => res.json())
         .then(data => {
           boundaryLayers[`町丁目境界${idx}`] = L.geoJSON(data, {
-            style: { color: "red", weight: 1, fillOpacity: 0.03 },
+            style: () => Object.assign({}, CHOME_BOUNDARY_STYLE),
             onEachFeature: (f, l) => {
               const content = `<strong>${f.properties["町丁目名"]}</strong><br>人口：${f.properties["JINKO"] ?? "不明"}`;
               if (!('ontouchstart' in window)) {
@@ -1234,8 +1246,11 @@ button.menu-sub-btn { flex: 1; padding: 8px; font-size: 11px; cursor: pointer; }
               }
               l.bindPopup(content);
               l.on({
-                mouseover: e => e.target.setStyle({ weight: 3, color: "#ff0000", fillOpacity: 0.15 }),
-                mouseout: e => e.target.setStyle({ weight: 1, color: "red", fillOpacity: 0.03 }),
+                mouseover: e => e.target.setStyle({
+                    color: "#e60073", weight: 2.5,
+                    fillColor: "#ff69b4", fillOpacity: 0.15
+                }),
+                mouseout: e => e.target.setStyle(Object.assign({}, CHOME_BOUNDARY_STYLE))
               });
             }
           });
@@ -2810,12 +2825,6 @@ fetch("geo_03_小学校.geojson")
             const color = colorMap["緑"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -2875,12 +2884,6 @@ fetch("geo_03_中学校.geojson")
             const color = colorMap["赤"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -2940,12 +2943,6 @@ fetch("geo_03_中等教育学校.geojson")
             const color = colorMap["茶"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -3005,12 +3002,6 @@ fetch("geo_03_高校.geojson")
             const color = colorMap["青"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -3070,12 +3061,6 @@ fetch("geo_03_高等専門学校.geojson")
             const color = colorMap["茶"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -3135,12 +3120,6 @@ fetch("geo_03_短期大学.geojson")
             const color = colorMap["茶"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -3200,12 +3179,6 @@ fetch("geo_03_大学.geojson")
             const color = colorMap["茶"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -3265,12 +3238,6 @@ fetch("geo_03_幼稚園.geojson")
             const color = colorMap["ピンク"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -3330,12 +3297,6 @@ fetch("geo_03_特別支援学校.geojson")
             const color = colorMap["茶"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -3395,12 +3356,6 @@ fetch("geo_03_幼保連携型認定こども園.geojson")
             const color = colorMap["オレンジ"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -3460,12 +3415,6 @@ fetch("geo_03_義務教育学校.geojson")
             const color = colorMap["茶"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -3525,12 +3474,6 @@ fetch("geo_03_各種学校.geojson")
             const color = colorMap["茶"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -3590,12 +3533,6 @@ fetch("geo_03_専修学校.geojson")
             const color = colorMap["茶"] || "blue";
             const markerRadius = (shape === 'star') ? 12 : 8;
 
-            // 学校GeoJSONの属性
-            // P29_003 = 学校分類コード
-            // P29_004 = 名称
-            // P29_005 = 所在地
-            // P29_006 = 管理者コード
-            // P29_007 = 休校コード
             const schoolName = f.properties["P29_004"] || "-";
             const schoolAddress = f.properties["P29_005"] || "-";
             const managerCode = String(f.properties["P29_006"] ?? "").trim();
@@ -3680,7 +3617,6 @@ fetch("geo_03_専修学校.geojson")
         });
     });
 
-    // ★ バス停留所専用のトグル処理
     document.querySelectorAll('.bus-toggle').forEach(cb => {
         cb.addEventListener('change', function() {
             const g = facilityLayers[this.value];
@@ -3698,7 +3634,6 @@ fetch("geo_03_専修学校.geojson")
         });
     });
 
-    // ★学校専用のトグル処理
     document.querySelectorAll('.school-toggle').forEach(cb => {
         cb.addEventListener('change', function() {
             const g = facilityLayers[this.value];
@@ -3714,7 +3649,6 @@ fetch("geo_03_専修学校.geojson")
         });
     });
 
-    // 施設種類（バス停留所を除く）のトグル処理
     document.querySelectorAll('.facility-toggle').forEach(cb => {
         cb.addEventListener('change', function() {
             const g = facilityLayers[this.value];
@@ -4027,8 +3961,6 @@ fetch("geo_03_専修学校.geojson")
         overlay.innerHTML = '';
         overlay.style.display = 'block';
 
-        // 「分割印刷ページを作成」と全く同じ印刷範囲を使う。
-        // map.project() の座標を、現在の地図コンテナ上の座標へ変換する。
         const mapContainer = map.getContainer();
         const rect = mapContainer.getBoundingClientRect();
         const mapSize = map.getSize();
@@ -4044,7 +3976,6 @@ fetch("geo_03_専修学校.geojson")
         const swScreen = toScreenPoint(data.sw);
         const neScreen = toScreenPoint(data.ne);
 
-        // 印刷範囲の外枠
         const outer = document.createElement('div');
         outer.style.position = 'absolute';
         outer.style.left = `${Math.min(swScreen.x, neScreen.x)}px`;
@@ -4061,7 +3992,6 @@ fetch("geo_03_専修学校.geojson")
         const left = Math.min(swScreen.x, neScreen.x);
         const top = Math.min(swScreen.y, neScreen.y);
 
-        // 内部の分割線
         for (let c = 1; c < data.cols; c++) {
             const line = document.createElement('div');
             line.className = 'print-grid-line';
@@ -4082,7 +4012,6 @@ fetch("geo_03_専修学校.geojson")
             overlay.appendChild(line);
         }
 
-        // ページ番号
         let n = 1;
         for (let r = 0; r < data.rows; r++) {
             for (let c = 0; c < data.cols; c++) {
@@ -4112,48 +4041,120 @@ fetch("geo_03_専修学校.geojson")
         if(o) o.style.display='none';
     }
 
-    function cloneLayerForPrint(layer, targetMap) {
+    function isBoundaryLayerChild(candidate) {
+        let found = false;
+        Object.values(boundaryLayers).forEach(group => {
+            if (!group || !group.eachLayer || found) return;
+            group.eachLayer(child => {
+                if (child === candidate) found = true;
+            });
+        });
+        return found;
+    }
+
+    function cloneCustomMarkerSingle(src, targetMap) {
+        try {
+            if (!src || !(src instanceof L.CustomMarker) || !src.getLatLng) return null;
+            const o = Object.assign({}, src.options || {});
+            o.renderer = targetMap.__printRenderer || L.canvas({ padding: 0.5 });
+            const copy = new L.CustomMarker(src.getLatLng(), o);
+            if (src.getPopup && src.getPopup()) {
+                copy.bindPopup(src.getPopup().getContent(), {
+                    maxWidth: src.getPopup().options?.maxWidth || 260
+                });
+            }
+            return copy.addTo(targetMap);
+        } catch (e) {
+            console.warn('単体CustomMarker複製失敗', e);
+            return null;
+        }
+    }
+
+    function cloneStandaloneCustomMarkers(targetMap) {
+        // 検索結果から単体でmapに追加されたL.CustomMarkerを収集して複製する
+        // （チェックボックスONでグループごと複製されるものと重複しないよう管理）
+        const seenLatLngKeys = new Set();
+        const renderer = targetMap.__printRenderer || L.canvas({ padding: 0.5 });
+        if (renderer._layers) {
+            Object.values(renderer._layers).forEach(l => {
+                if (l instanceof L.CustomMarker && l.getLatLng) {
+                    const ll = l.getLatLng();
+                    seenLatLngKeys.add(`${ll.lat.toFixed(7)},${ll.lng.toFixed(7)},${l.options?.shape || ''},${l.options?.fillColor || ''}`);
+                }
+            });
+        }
+
+        map.eachLayer(layer => {
+            if (layer instanceof L.CustomMarker && layer.getLatLng) {
+                const ll = layer.getLatLng();
+                const key = `${ll.lat.toFixed(7)},${ll.lng.toFixed(7)},${layer.options?.shape || ''},${layer.options?.fillColor || ''}`;
+                if (!seenLatLngKeys.has(key)) {
+                    seenLatLngKeys.add(key);
+                    cloneCustomMarkerSingle(layer, targetMap);
+                }
+            }
+        });
+    }
+
+    function cloneLayerForPrint(layer, targetMap, styleOverride = null) {
         try {
             if (layer instanceof L.TileLayer) {
-                return null; // タイルは後で現在の設定から複製
+                return null;
             }
 
-            // ユーザーが地図上に追加したテキスト・画像を複製する。
-            // これらはGeoJSONではなくL.Marker(L.DivIcon)なので、
-            // toGeoJSON()だけでは文字や画像の内容が失われる。
+            if (layer instanceof L.CustomMarker) {
+                return cloneCustomMarkerSingle(layer, targetMap);
+            }
+
             if (layer instanceof L.Marker) {
                 const el = layer.getElement && layer.getElement();
                 const isCustomText = !!((el && el.classList && el.classList.contains('custom-text-marker')) || (el && el.querySelector && el.querySelector('.custom-text-marker')) || (layer.options && layer.options.icon && layer.options.icon.options && String(layer.options.icon.options.className || '').includes('custom-text-marker')));
                 const isCustomImage = !!(el && el.querySelector && el.querySelector('.map-added-image'));
 
+                const icon = layer.getIcon ? layer.getIcon() : null;
+
                 if (isCustomText || isCustomImage) {
-                    const icon = layer.getIcon ? layer.getIcon() : null;
                     if (!icon) return null;
 
                     const opts = Object.assign({}, icon.options || {});
-                    // DOMから現在表示されているHTMLを取得。
-                    // これにより、画像の拡大縮小・回転やテキストの書式を保持する。
                     opts.html = icon.options?.html || (el ? el.innerHTML : '');
                     opts.className = icon.options?.className || '';
                     opts.iconSize = icon.options?.iconSize || [0, 0];
                     opts.iconAnchor = icon.options?.iconAnchor || [0, 0];
 
-                    const copy = L.marker(layer.getLatLng(), {
+                    return L.marker(layer.getLatLng(), {
                         icon: L.divIcon(opts),
                         interactive: false,
                         keyboard: false
                     }).addTo(targetMap);
+                }
 
-                    return copy;
+                if (!(Array.isArray(routeMarkers) && routeMarkers.includes(layer))) {
+                    const printIcon = L.icon({
+                        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+                        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41],
+                        className: 'leaflet-marker-icon'
+                    });
+
+                    return L.marker(layer.getLatLng(), {
+                        icon: printIcon,
+                        opacity: layer.options?.opacity ?? 1,
+                        zIndexOffset: layer.options?.zIndexOffset ?? 0,
+                        draggable: false,
+                        interactive: false,
+                        keyboard: false
+                    }).addTo(targetMap);
                 }
 
                 return null;
             }
 
             if (layer instanceof L.GeoJSON || layer instanceof L.FeatureGroup) {
-                // 施設・バス停などのカスタムマーカーは、GeoJSONを単純に
-                // circleMarkerへ変換すると元の鮮明な形・色・大きさが失われる。
-                // 元レイヤーの子レイヤーを直接複製して、CustomMarkerを保持する。
                 const group = L.featureGroup();
 
                 if (layer.eachLayer) {
@@ -4163,7 +4164,6 @@ fetch("geo_03_専修学校.geojson")
 
                             if (ll && src instanceof L.CustomMarker) {
                                 const o = Object.assign({}, src.options || {});
-                                // 元地図のRendererを共有せず、印刷用地図専用Rendererを使用
                                 o.renderer = targetMap.__printRenderer || L.canvas({ padding: 0.5 });
                                 const copy = new L.CustomMarker(ll, o);
 
@@ -4183,26 +4183,39 @@ fetch("geo_03_専修学校.geojson")
                             }
 
                             if (src instanceof L.Marker) {
-                                const icon = src.getIcon ? src.getIcon() : null;
-                                if (icon) {
-                                    const o = Object.assign({}, icon.options || {});
-                                    o.html = icon.options?.html || '';
-                                    group.addLayer(L.marker(ll, {
-                                        icon: L.divIcon(o),
-                                        interactive: false,
-                                        keyboard: false
-                                    }));
-                                }
-                                return;
-                            }
-
-                            if (src instanceof L.Polyline) {
-                                group.addLayer(L.polyline(src.getLatLngs(), Object.assign({}, src.options || {})));
+                                const copiedIcon = L.icon({
+                                    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                                    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+                                    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                                    iconSize: [25, 41],
+                                    iconAnchor: [12, 41],
+                                    popupAnchor: [1, -34],
+                                    shadowSize: [41, 41],
+                                    className: 'leaflet-marker-icon'
+                                });
+                                group.addLayer(L.marker(ll, {
+                                    icon: copiedIcon,
+                                    opacity: src.options?.opacity ?? 1,
+                                    zIndexOffset: src.options?.zIndexOffset ?? 0,
+                                    interactive: false,
+                                    keyboard: false
+                                }));
                                 return;
                             }
 
                             if (src instanceof L.Polygon) {
-                                group.addLayer(L.polygon(src.getLatLngs(), Object.assign({}, src.options || {})));
+                                group.addLayer(L.polygon(
+                                    src.getLatLngs(),
+                                    Object.assign({}, src.options || {}, styleOverride || {})
+                                ));
+                                return;
+                            }
+
+                            if (src instanceof L.Polyline) {
+                                group.addLayer(L.polyline(
+                                    src.getLatLngs(),
+                                    Object.assign({}, src.options || {}, styleOverride || {})
+                                ));
                                 return;
                             }
                         } catch(e) {
@@ -4212,24 +4225,25 @@ fetch("geo_03_専修学校.geojson")
                 }
 
                 if (group.getLayers().length) {
+                    if (styleOverride && group.setStyle) group.setStyle(styleOverride);
                     return group.addTo(targetMap);
                 }
 
-                // 子レイヤーを取得できない場合の予備処理
                 const gj = layer.toGeoJSON ? layer.toGeoJSON() : null;
                 if (gj) {
                     return L.geoJSON(gj, {
                         pane: 'overlayPane',
                         pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
                             radius: 5,
-                            color: '#3388ff',
-                            weight: 1,
-                            fillColor: '#3388ff',
-                            fillOpacity: 0.7
+                            color: '#ff69b4',
+                            weight: 1.5,
+                            fillColor: '#ff69b4',
+                            fillOpacity: 0.1
                         }),
-                        style: () => ({
-                            color:'#3388ff', weight:1, fillOpacity:0.15
-                        })
+                        style: () => Object.assign({
+                            color: '#ff69b4', weight: 1.5, opacity: 1,
+                            fillColor: '#ff69b4', fillOpacity: 0.1
+                        }, styleOverride || {})
                     }).addTo(targetMap);
                 }
             }
@@ -4259,26 +4273,18 @@ fetch("geo_03_専修学校.geojson")
     }
 
     function getPrintBounds() {
-        // 「① 印刷範囲を表示」と「② 分割印刷ページを作成」が
-        // 必ず同じ境界を使用するための共通計算。
         const {cols, rows} = getPrintGrid();
         const orientation = document.getElementById('print-orientation').value;
-
-        // A4・A3とも縦横比は同じ（横：297/210、A3：420/297）
-        // したがって地図の分割範囲は用紙サイズによらず同じ比率で計算する。
         const paperSize = document.getElementById('print-paper-size')?.value || 'A4';
         const pageRatio = orientation === 'portrait'
             ? 210 / 297
             : 297 / 210;
-
-        // 3×3なら、ページ1枚の比率を3倍したものが全体の比率。
         const totalRatio = (cols * pageRatio) / rows;
 
         const center = map.getCenter();
         const zoom = map.getZoom();
         const size = map.getSize();
 
-        // 現在の地図画面内に収まる最大の「印刷全体範囲」を作る。
         let totalW = size.y * totalRatio;
         let totalH = size.y;
 
@@ -4312,7 +4318,6 @@ fetch("geo_03_専修学校.geojson")
         };
     }
 
-    // 分割印刷プレビューの画面表示倍率。印刷ページの実寸・地図倍率とは別管理。
     let printPreviewDisplayScale = 1;
     let printPreviewNativePageWidth = 1122;
     let printPreviewNativePageHeight = 793;
@@ -4351,6 +4356,54 @@ fetch("geo_03_専修学校.geojson")
         preview.scrollTop = 0;
     }
 
+    let printPinchStartDistance = 0;
+    let printPinchStartScale = 1;
+    let printPreviewPinchInstalled = false;
+
+    function enablePrintPreviewPinchZoom() {
+        const preview = document.getElementById('print-preview');
+        if (!preview || printPreviewPinchInstalled) return;
+        printPreviewPinchInstalled = true;
+
+        const distance = (touches) => {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        };
+
+        preview.addEventListener('touchstart', (e) => {
+            if (e.target.closest && e.target.closest('#print-preview-tools, .print-close')) return;
+            if (e.touches && e.touches.length === 2) {
+                printPinchStartDistance = distance(e.touches);
+                printPinchStartScale = printPreviewDisplayScale;
+            }
+        }, { passive: true });
+
+        preview.addEventListener('touchmove', (e) => {
+            if (!e.touches || e.touches.length !== 2 || !printPinchStartDistance) return;
+            if (e.cancelable) e.preventDefault();
+            const currentDistance = distance(e.touches);
+            const ratio = currentDistance / printPinchStartDistance;
+            printPreviewDisplayScale = Math.max(
+                0.2,
+                Math.min(2.5, printPinchStartScale * ratio)
+            );
+            applyPrintPreviewScale();
+        }, { passive: false });
+
+        const resetPinch = () => {
+            printPinchStartDistance = 0;
+        };
+        preview.addEventListener('touchend', resetPinch, { passive: true });
+        preview.addEventListener('touchcancel', resetPinch, { passive: true });
+
+        ['gesturestart', 'gesturechange', 'gestureend'].forEach(type => {
+            preview.addEventListener(type, e => {
+                if (e.cancelable) e.preventDefault();
+            }, { passive: false });
+        });
+    }
+
     async function createPosterPrint() {
         const grid = getPrintGrid();
         if (!grid) return;
@@ -4365,8 +4418,6 @@ fetch("geo_03_専修学校.geojson")
             );
             if (!proceed) return;
         }
-        // 「① 印刷範囲を表示」で表示した境界線は残す。
-        // 分割印刷ページの作成時にも、同じ範囲を確認できるようにする。
         const data = getPrintBounds();
         const preview = document.getElementById('print-preview');
         const inner = document.getElementById('print-preview-inner');
@@ -4378,7 +4429,6 @@ fetch("geo_03_専修学校.geojson")
         const totalPages = data.cols * data.rows;
         const isA3 = data.paperSize === 'A3';
         const isPortrait = data.orientation === 'portrait';
-        // 画面上のプレビュー用サイズ（A4=約96dpi基準、A3は1.414倍）
         const pageCssW = isA3
             ? (isPortrait ? 1122 : 1587)
             : (isPortrait ? 793 : 1122);
@@ -4387,16 +4437,13 @@ fetch("geo_03_専修学校.geojson")
             : (isPortrait ? 1122 : 793);
         printPreviewNativePageWidth = pageCssW;
         printPreviewNativePageHeight = pageCssH;
-        // iPhoneなど幅の狭い画面では、最初から用紙全体が見える倍率にする。
-        // PC・iPadでは従来どおり100%表示。
         const previewAvailableWidth = Math.max(200, window.innerWidth - 24);
         printPreviewDisplayScale = window.innerWidth <= 700
             ? Math.min(1, previewAvailableWidth / pageCssW)
             : 1;
 
-        // Leafletはdisplay:noneのコンテナでは正しいサイズを取得できないため、
-        // 索引・詳細ページを作成する前にプレビューを表示状態にする。
         preview.style.display = 'block';
+        enablePrintPreviewPinchZoom();
 
         // =====================================================
         // 先頭ページ：全体索引（分割区画と詳細ページ番号）
@@ -4443,13 +4490,14 @@ fetch("geo_03_専修学校.geojson")
         const indexBounds = L.latLngBounds(indexSW, indexNE);
         indexMap.fitBounds(indexBounds, { padding: [12, 12] });
 
-        // 現在表示中の施設・学校・バス停・境界線を索引にも複製
         document.querySelectorAll('.facility-toggle:checked,.bus-toggle:checked,.school-toggle:checked,.boundary-toggle:checked').forEach(cb => {
             const layer = (facilityLayers[cb.value] || boundaryLayers[cb.value]);
-            if (layer) cloneLayerForPrint(layer, indexMap);
+            if (layer) cloneLayerForPrint(layer, indexMap, cb.classList.contains("boundary-toggle") ? CHOME_BOUNDARY_STYLE : null);
         });
-        // 現在の地図上の描画物、テキスト、画像も索引に複製
+        cloneStandaloneCustomMarkers(indexMap);
+
         map.eachLayer(layer => {
+            if (isBoundaryLayerChild(layer)) return;
             if (layer instanceof L.Polyline || layer instanceof L.Polygon || layer instanceof L.Circle) {
                 if (layer.options?.pane !== 'hazardPane' && layer.options?.pane !== 'boundaryPane') {
                     try { L.geoJSON(layer.toGeoJSON()).addTo(indexMap); } catch(e) {}
@@ -4460,12 +4508,11 @@ fetch("geo_03_専修学校.geojson")
                     const el = layer.getElement && layer.getElement();
                     const isCustomText = !!((el && el.classList && el.classList.contains('custom-text-marker')) || (el && el.querySelector && el.querySelector('.custom-text-marker')) || (layer.options && layer.options.icon && layer.options.icon.options && String(layer.options.icon.options.className || '').includes('custom-text-marker')));
                     const isCustomImage = !!(el && el.querySelector && el.querySelector('.map-added-image'));
-                    if (isCustomText || isCustomImage) cloneLayerForPrint(layer, indexMap);
+                    if (isCustomText || isCustomImage || !routeMarkers.includes(layer)) cloneLayerForPrint(layer, indexMap);
                 } catch(e) {}
             }
         });
 
-        // 索引の赤い分割線と、詳細ページ番号を表示（左上から右へ、次の段へ）
         for (let ir = 0; ir < data.rows; ir++) {
             for (let ic = 0; ic < data.cols; ic++) {
                 const pageNo = ir * data.cols + ic + 1;
@@ -4484,7 +4531,7 @@ fetch("geo_03_専修学校.geojson")
                     fill: false,
                     interactive: false
                 }).addTo(indexMap);
-                const label = L.marker(cellBounds.getCenter(), {
+                L.marker(cellBounds.getCenter(), {
                     interactive: false,
                     icon: L.divIcon({
                         className: 'print-index-number',
@@ -4511,12 +4558,6 @@ fetch("geo_03_専修学校.geojson")
                 page.style.aspectRatio = `${pageW}`;
                 const title=document.createElement('div');
                 title.className='print-page-title';
-                // ★【追加】本日の日付を取得し、月日を2桁に揃える
-                const today = new Date();
-                const yyyy = today.getFullYear();
-                const mm = String(today.getMonth() + 1).padStart(2, '0');
-                const dd = String(today.getDate()).padStart(2, '0');
-                const formattedDate = `${yyyy}/${mm}/${dd}`;
                 title.textContent=`Page:${pageNo} / ${totalPages}`;
                 page.appendChild(title);
                 const mapDiv=document.createElement('div');
@@ -4532,7 +4573,6 @@ fetch("geo_03_専修学校.geojson")
                 const y2=data.sw.y + (data.totalH/data.rows)*(r+1);
                 const mid=L.point((x1+x2)/2,(y1+y2)/2);
 
-                // 各A4ページが全体の1ページ分だけを表示するようズームを調整
                 const pagePixelW = data.totalW / data.cols;
                 const pagePixelH = data.totalH / data.rows;
                 const scaleX = pageCssW / pagePixelW;
@@ -4555,45 +4595,35 @@ fetch("geo_03_専修学校.geojson")
                     touchZoom:false
                 });
 
-                // ★重要：印刷用地図では元地図の myRenderer を共有しない。
-                // CustomMarker は Canvas Renderer を使用しているため、
-                // 同じ Renderer を複数の Leaflet 地図で共有すると、
-                // 元の地図の病院・診療所等のマーカーが消えることがある。
-                // 印刷ページごとに専用Rendererを作成する。
                 pm.__printRenderer = L.canvas({ padding: 0.5 });
 
-                // ハザードタイルは元の地図で「hazardPane」を使用している。
-                // 印刷用Leaflet地図にも同じPaneを作らないと、
-                // 洪水・津波・高潮などのタイルを追加できない。
                 pm.createPane('hazardPane');
                 pm.getPane('hazardPane').style.zIndex = 300;
                 pm.getPane('hazardPane').style.pointerEvents = 'none';
 
                 addPrintBaseLayer(pm);
 
-                // 現在ONになっている施設・境界線を複製
                 document.querySelectorAll('.facility-toggle:checked,.bus-toggle:checked,.school-toggle:checked,.boundary-toggle:checked').forEach(cb=>{
                     const layer=(facilityLayers[cb.value]||boundaryLayers[cb.value]);
-                    if(layer) cloneLayerForPrint(layer,pm);
+                    if(layer) cloneLayerForPrint(layer,pm,cb.classList.contains("boundary-toggle") ? CHOME_BOUNDARY_STYLE : null);
                 });
+                cloneStandaloneCustomMarkers(pm);
 
-                // 現在地図上の描画物・ユーザー追加テキスト・画像を複製
                 map.eachLayer(layer=>{
+                    if (isBoundaryLayerChild(layer)) return;
                     if(layer instanceof L.Polyline || layer instanceof L.Polygon || layer instanceof L.Circle){
                         if(layer.options?.pane !== 'hazardPane' && layer.options?.pane !== 'boundaryPane'){
                             try { L.geoJSON(layer.toGeoJSON()).addTo(pm); } catch(e){}
                         }
                     }
 
-                    // 「Ｔ」で追加したテキスト、および画像ツールで追加したJPG等を
-                    // 印刷用地図にも同じ緯度経度で配置する。
                     if(layer instanceof L.Marker){
                         try {
                             const el = layer.getElement && layer.getElement();
                             const isCustomText = !!((el && el.classList && el.classList.contains('custom-text-marker')) || (el && el.querySelector && el.querySelector('.custom-text-marker')) || (layer.options && layer.options.icon && layer.options.icon.options && String(layer.options.icon.options.className || '').includes('custom-text-marker')));
                             const isCustomImage = !!(el && el.querySelector && el.querySelector('.map-added-image'));
 
-                            if(isCustomText || isCustomImage){
+                            if(isCustomText || isCustomImage || !routeMarkers.includes(layer)){
                                 cloneLayerForPrint(layer, pm);
                             }
                         } catch(e) {
@@ -4606,14 +4636,12 @@ fetch("geo_03_専修学校.geojson")
             }
         }
 
-        // 表示後、Leafletに実際のページサイズを再取得させる。
         applyPrintPreviewScale();
         setTimeout(()=>{
             applyPrintPreviewScale();
             printPreviewMaps.forEach(m=>{
                 try { m.invalidateSize(true); } catch(e) {}
             });
-            // 索引は非表示時に作成しない。表示後に全体範囲へ再フィットさせる。
             try {
                 indexMap.fitBounds(indexBounds, {padding: [12, 12]});
             } catch(e) {
@@ -4625,18 +4653,14 @@ fetch("geo_03_専修学校.geojson")
     }
 
     function closePrintPreview() {
-        // 印刷画面を閉じて元の地図へ戻る際は、
-        // 「① 印刷範囲を表示」で出した赤い境界線も必ず消す。
         const preview = document.getElementById('print-preview');
         if (preview) preview.style.display='none';
 
         printPreviewMaps.forEach(m=>{try{m.remove();}catch(e){}});
         printPreviewMaps=[];
 
-        // 元の地図を通常表示へ戻す。
         closePrintGrid();
 
-        // 印刷パネルも閉じて、元の地図をそのまま操作できる状態にする。
         const panel = document.getElementById('print-panel');
         if (panel) panel.style.display='none';
     }
